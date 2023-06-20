@@ -1,13 +1,12 @@
-﻿// SocketClient.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
-//
-
-#define WIN32_LEAN_AND_MEAN
+﻿#define WIN32_LEAN_AND_MEAN
 
 #include <iostream>
 #include <windows.h>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
-
+#include <thread>
+#include <map>
+#include <ctime>
 using namespace std;
 
 int main()
@@ -19,10 +18,10 @@ int main()
     SOCKET ListenSoket = INVALID_SOCKET;
 
     const char* sendBuffer = "SendScr";
-
+    int SaveConnection[512];
     char recvBuffer[512];
-
-    int result;
+    map<int, string> Save;
+    int result, Connection=0;
 
     result = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (result != 0)
@@ -74,19 +73,24 @@ int main()
         WSACleanup();
         return 1;
     }
-
-    ClientSoket = accept(ListenSoket, NULL,NULL);
-    if (ClientSoket == INVALID_SOCKET)
-    {
-        cout << "Accepting socket failed" << endl;
-        closesocket(ListenSoket);
-        freeaddrinfo(addrResult);
-        WSACleanup();
-        return 1;
-    }
-    
-    closesocket(ListenSoket);
-
+    thread t1([&]()
+        {
+            while (true) {
+                ClientSoket = accept(ListenSoket, NULL, NULL);
+                if (ClientSoket == INVALID_SOCKET)
+                {
+                    cout << "Accepting socket failed" << endl;
+                    closesocket(ListenSoket);
+                    freeaddrinfo(addrResult);
+                    WSACleanup();
+                    return 1;
+                }
+                SaveConnection[Connection] = ClientSoket;
+                Connection++;
+            }
+        });
+    thread t2([&]()
+        {
     do
     {
         ZeroMemory(recvBuffer, 512);
@@ -94,7 +98,7 @@ int main()
         if (result > 0)
         {
             cout << "Received data: " << recvBuffer << endl;
-
+            Save[SaveConnection[Connection]] = recvBuffer;
             result = send(ClientSoket, sendBuffer, (int)strlen(sendBuffer), 0);
             if (result == SOCKET_ERROR)
             {
@@ -107,7 +111,9 @@ int main()
             else if (result == 0)
             {
                 cout << "Connecting closing" << endl;
-
+                time_t now = time(0);
+                char* dt = ctime(&now);
+                Save[SaveConnection[Connection]] += dt;
             }
             else
             {
@@ -133,4 +139,19 @@ int main()
     freeaddrinfo(addrResult);
     WSACleanup();
     return 0;
+        });
+    thread t3([&]()
+        {
+            string cashe;
+            while (cashe != "close") {
+                cout << "show connection history?";
+                cin >> cashe;
+                if (cashe == "yes")
+                {
+                    for (int i = 0; i <= Connection; i++) {
+                        cout << "Socket: " << SaveConnection[i] << " info: " << Save[SaveConnection[Connection]]<<endl;
+                    }
+                }
+            }
+        });
 }
